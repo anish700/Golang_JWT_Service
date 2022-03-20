@@ -59,25 +59,26 @@ func Signup() gin.HandlerFunc {
 
 		// count = no of records with same email
 		count, err := UserCollection.CountDocuments(ctx, bson.M{"email": user.Email})
+		defer cancel()
 		if err != nil {
 			log.Panic(err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "error occured while checking for the email"})
 		}
-		defer cancel()
 
 		password := HashPassword(*user.Password)
 		user.Password = &password
 
 		// count = no of records with same phone number
 		count, err = UserCollection.CountDocuments(ctx, bson.M{"phone": user.Phone})
+		defer cancel()
 		if err != nil {
 			log.Panic(err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "error occured while checking for the phone number"})
 		}
-		defer cancel()
 
 		if count > 0 {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "this email or phone number already exists"})
+			return
 		}
 
 		user.CreatedAt, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
@@ -117,7 +118,6 @@ func Login() gin.HandlerFunc {
 		// get the user using the email and unmarshall it into foundUser
 		err := UserCollection.FindOne(ctx, bson.M{"email": user.Email}).Decode(&foundUser)
 		defer cancel()
-
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Email or Password is incorrect"})
 			return
@@ -126,7 +126,6 @@ func Login() gin.HandlerFunc {
 		//verify password and email
 		isPasswordValid, msg := VerifyPassword(*user.Password, *foundUser.Password)
 		defer cancel()
-
 		if isPasswordValid != true {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": msg})
 			return
@@ -153,21 +152,19 @@ func Login() gin.HandlerFunc {
 //Only admin can access this
 func GetUserbyId() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		var user models.User
 		userId := c.Param("user_id")
 
-		err := helper.MatchUserTypeToUuid(c, userId)
-		if err != nil {
+		if err := helper.MatchUserTypeToUuid(c, userId); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
-		var user models.User
 
-		err2 := UserCollection.FindOne(ctx, bson.M{"user_id": userId}).Decode(&user)
+		findErr := UserCollection.FindOne(ctx, bson.M{"user_id": userId}).Decode(&user)
 		defer cancel()
-		if err2 != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		if findErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": findErr.Error()})
 			return
 		}
 		c.JSON(http.StatusOK, user)
@@ -198,21 +195,44 @@ func GetUsers() gin.HandlerFunc {
 		}
 
 		// MongoDB aggregations ??
-		cursor, err := UserCollection.Find(ctx, bson.M{})
+		//cursor, err := UserCollection.Find(ctx, bson.M{})
+		//if err != nil {
+		//	log.Fatal(err)
+		//}
+		//defer cursor.Close(ctx)
+		//
+		//defer cancel()
+		//
+		//var allUsers []bson.M
+		//for cursor.Next(ctx) {
+		//	if err = cursor.Decode(&allUsers); err != nil {
+		//		c.JSON(http.StatusInternalServerError, gin.H{"error": "error occured while listing user items"})
+		//	}
+		//	fmt.Println(allUsers)
+		//}
+		startIndex := (pagenumber - 1) * recordPerPage
+		startIndex, err = strconv.Atoi(c.Query("startIndex"))
+
+		matchStage := bson.D{{"$match", bson.D{{}}}}
+		groupStage := bson.D{{"$group", bson.D{
+			{"_id", bson.D{{"_id", "null"}}},
+			{"total_count", bson.D{{"$sum", 1}}},
+			{"data", bson.D{{"$push", "$$ROOT"}}}}}}
+		projectStage := bson.D{
+			{"$project", bson.D{
+				{"_id", 0},
+				{"total_count", 1},
+				{"user_items", bson.D{{"$slice", []interface{}{"$data", startIndex, recordPerPage}}}}}}}
+		result, err := UserCollection.Aggregate(ctx, mongo.Pipeline{
+			matchStage, groupStage, projectStage})
+		defer cancel()
 		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "error occured while listing user items"})
+		}
+		var allusers []bson.M
+		if err = result.All(ctx, &allusers); err != nil {
 			log.Fatal(err)
 		}
-		defer cursor.Close(ctx)
-
-		defer cancel()
-
-		var allUsers []bson.M
-		for cursor.Next(ctx) {
-			if err = cursor.Decode(&allUsers); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "error occured while listing user items"})
-			}
-			fmt.Println(allUsers)
-		}
-		c.JSON(http.StatusOK, allUsers)
+		c.JSON(http.StatusOK, allusers[0])
 	}
 }

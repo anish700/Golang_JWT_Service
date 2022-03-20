@@ -7,7 +7,6 @@ import (
 )
 
 func UserRoutes(incomingRoutes *gin.Engine) {
-
 	// All user routes need authentication using token
 	incomingRoutes.Use(middleware.Authenticate())
 	incomingRoutes.GET("/users", controller.GetUsers())
