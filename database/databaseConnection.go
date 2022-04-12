@@ -27,7 +27,7 @@ func DBinstance() *mongo.Client {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("connected to mongodb")
+	fmt.Println("Connected to MongoDB !!")
 	return client
 }
 

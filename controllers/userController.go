@@ -88,7 +88,7 @@ func Signup() gin.HandlerFunc {
 
 		// generate token and refresh token
 		token, refreshToken, _ := helper.GenerateAllTokens(*user.Email, *user.FirstName, *user.LastName, *user.UserType, *&user.UserId)
-		user.Token = &token //what happens if just token
+		user.Token = &token
 		user.RefreshToken = &refreshToken
 
 		// insert this created user into the DB
@@ -194,22 +194,7 @@ func GetUsers() gin.HandlerFunc {
 			pagenumber = 1 //default
 		}
 
-		// MongoDB aggregations ??
-		//cursor, err := UserCollection.Find(ctx, bson.M{})
-		//if err != nil {
-		//	log.Fatal(err)
-		//}
-		//defer cursor.Close(ctx)
-		//
-		//defer cancel()
-		//
-		//var allUsers []bson.M
-		//for cursor.Next(ctx) {
-		//	if err = cursor.Decode(&allUsers); err != nil {
-		//		c.JSON(http.StatusInternalServerError, gin.H{"error": "error occured while listing user items"})
-		//	}
-		//	fmt.Println(allUsers)
-		//}
+		// MongoDB aggregations
 		startIndex := (pagenumber - 1) * recordPerPage
 		startIndex, err = strconv.Atoi(c.Query("startIndex"))
 
@@ -227,7 +212,7 @@ func GetUsers() gin.HandlerFunc {
 			matchStage, groupStage, projectStage})
 		defer cancel()
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "error occured while listing user items"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "error occurred while listing all user items"})
 		}
 		var allusers []bson.M
 		if err = result.All(ctx, &allusers); err != nil {
